@@ -1,1 +1,2 @@
 rosbags
+opencv-python

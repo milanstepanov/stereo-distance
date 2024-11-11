@@ -1,2 +1,10 @@
 rosbags
 opencv-python
+pyyaml
+
+black
+
+pylint
+
+pytest
+pytest-cov

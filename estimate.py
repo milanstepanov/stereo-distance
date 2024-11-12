@@ -4,20 +4,26 @@ from input import extract_rgb, Meta
 import numpy as np
 import cv2
 
+from helpers import measure_execution_time, measure_memory_usage
+
 
 class DepthEstimation:
-    def __init__(self, path_to_bag: str, path_to_config_left: str, path_to_config_right: str):
-        
-        self.path_to_bag = path_to_bag
+
+    @measure_memory_usage
+    @measure_execution_time
+    def __init__(self, path_to_config_left: str, path_to_config_right: str):
+
         self.path_to_config_left = path_to_config_left
         self.path_to_config_right = path_to_config_right
-
-        self.raw_l, self.raw_r = extract_rgb(self.path_to_bag)
 
         self.meta_l = Meta(self.path_to_config_left)
         self.meta_r = Meta(self.path_to_config_right)
         self.baseline = -self.meta_r.projection_matrix[0,-1] / self.meta_r.projection_matrix[0,0]
 
+    def set_input(self, path_to_bag: str):
+
+        self.path_to_bag = path_to_bag
+        self.raw_l, self.raw_r = extract_rgb(self.path_to_bag)
         self.rectified_l, self.rectified_r = DepthEstimation.rectify(self.raw_l, self.meta_l,
                                                                      self.raw_r, self.meta_r)
 
@@ -41,7 +47,9 @@ class DepthEstimation:
         return left_rectified, right_rectified
     
 
-    def compute_disparity(self, is_checkerboard: bool=False, checkerboard_pattern: tuple=None, is_debug=False):
+    @measure_memory_usage
+    @measure_execution_time
+    def compute_disparity(self, roi: tuple=None, is_checkerboard: bool=False, checkerboard_pattern: tuple=None, is_debug=False):
         if is_checkerboard:
             if checkerboard_pattern:
 
@@ -88,76 +96,85 @@ class DepthEstimation:
                 cb_right = int(cb_right)
                 cb_top = int(cb_top)
                 cb_bottom = int(cb_bottom)
-
-                cb_centre_x = int((cb_left + cb_right)*.5)
-
-                if is_debug:
-
-                    debug_rectified_l = self.rectified_l.copy()
-
-                    cb_top_left = (cb_left, cb_top)
-                    cb_bottom_right = (cb_right, cb_bottom)
-
-                    cv2.rectangle(debug_rectified_l, cb_top_left, cb_bottom_right, (0,0,255), 4)
-
-                    cv2.namedWindow("checkerboard full scale", cv2.WINDOW_NORMAL)
-                    cv2.imshow("checkerboard full scale", debug_rectified_l)
-                    cv2.waitKey(0)
-                    cv2.destroyWindow("checkerboard full scale")
-
-                # use template matching to find checkerboard in right image
-                rectified_gray_l = cv2.cvtColor(self.rectified_l, cv2.COLOR_RGB2GRAY)
-                rectified_gray_r = cv2.cvtColor(self.rectified_r, cv2.COLOR_RGB2GRAY)
-
-                template = rectified_gray_l[cb_top:cb_bottom, cb_left:cb_right]
-                if is_debug:
-                    cv2.imshow("template", template)
-                    cv2.waitKey(0)
-                    cv2.destroyAllWindows()
-                w, h = template.shape[::-1]
-
-                matching_score = cv2.matchTemplate(rectified_gray_r, template, cv2.TM_SQDIFF)
-                _, _, min_loc, _ = cv2.minMaxLoc(matching_score)
-                top_left = min_loc
-
-                match_centre_x = top_left[0] + w//2
-
-                if is_debug:
-
-                    debug_matching = self.rectified_r.copy()
- 
-                    bottom_right = (top_left[0] + w, top_left[1] + h)
-                    cv2.rectangle(debug_matching,top_left, bottom_right, (255,0,0), 2)
-
-                    match_centre_y = top_left[1] + h//2                    
-                    cv2.circle(debug_matching, (match_centre_x,match_centre_y), 10, (255,0,0), thickness=4)
-
-                    cv2.namedWindow("matching score", cv2.WINDOW_NORMAL)
-                    cv2.imshow("matching score", matching_score/matching_score.max())
-
-                    cv2.namedWindow("match", cv2.WINDOW_NORMAL)
-                    cv2.imshow("match", debug_matching)
-
-                    cv2.waitKey(0)
-                    cv2.destroyAllWindows()
-
-                self.disparity = abs(match_centre_x-cb_centre_x)
-            
             else:
                 raise ValueError(f"Cannot use {is_checkerboard=} mode without setting {checkerboard_pattern=} properly.")
         
+        elif roi is not None:
+            cb_left, cb_top, cb_right, cb_bottom = roi   
+
         else:
-            raise NotImplementedError("Only checkerboard images are supported.")
+            raise NotImplementedError("Have to support an image of checkerboard with (10,7) pattern or provide ROI of an object.")
+
+
+
+        cb_centre_x = int((cb_left + cb_right)*.5)
+
+        if is_debug:
+
+            debug_rectified_l = self.rectified_l.copy()
+
+            cb_top_left = (cb_left, cb_top)
+            cb_bottom_right = (cb_right, cb_bottom)
+
+            cv2.rectangle(debug_rectified_l, cb_top_left, cb_bottom_right, (0,0,255), 4)
+
+            cv2.namedWindow("checkerboard full scale", cv2.WINDOW_NORMAL)
+            cv2.imshow("checkerboard full scale", debug_rectified_l)
+            cv2.waitKey(0)
+            cv2.destroyWindow("checkerboard full scale")
+
+        # use template matching to find checkerboard in right image
+        rectified_gray_l = cv2.cvtColor(self.rectified_l, cv2.COLOR_RGB2GRAY)
+        rectified_gray_r = cv2.cvtColor(self.rectified_r, cv2.COLOR_RGB2GRAY)
+
+        template = rectified_gray_l[cb_top:cb_bottom, cb_left:cb_right]
+        if is_debug:
+            cv2.imshow("template", template)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+        w, h = template.shape[::-1]
+
+        matching_score = cv2.matchTemplate(rectified_gray_r, template, cv2.TM_SQDIFF)
+        _, _, min_loc, _ = cv2.minMaxLoc(matching_score)
+        top_left = min_loc
+
+        match_centre_x = top_left[0] + w//2
+
+        if is_debug:
+
+            debug_matching = self.rectified_r.copy()
+
+            bottom_right = (top_left[0] + w, top_left[1] + h)
+            cv2.rectangle(debug_matching,top_left, bottom_right, (255,0,0), 2)
+
+            match_centre_y = top_left[1] + h//2                    
+            cv2.circle(debug_matching, (match_centre_x,match_centre_y), 10, (255,0,0), thickness=4)
+
+            cv2.namedWindow("matching score", cv2.WINDOW_NORMAL)
+            cv2.imshow("matching score", matching_score/matching_score.max())
+
+            cv2.namedWindow("match", cv2.WINDOW_NORMAL)
+            cv2.imshow("match", debug_matching)
+
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+
+        self.disparity = abs(match_centre_x-cb_centre_x)
 
     
     def compute_depth(self):
-
+        """Return depth in mm."""
         self.depth = DepthEstimation.to_depth(self.disparity, self.meta_l.projection_matrix[0,0], self.baseline)
         return self.depth*1000
 
     @staticmethod
     def to_depth(disparity: float, focal_length: float, baseline: float):
         return baseline*focal_length / disparity
+    
+
+    @staticmethod
+    def to_disparity(depth: float, focal_length: float, baseline: float):
+        return baseline*focal_length / depth
     
 
     def process(self,):

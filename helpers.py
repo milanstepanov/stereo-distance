@@ -1,5 +1,43 @@
 import numpy as np
 
+import tracemalloc
+import time
+
+def measure_memory_usage(func):
+    def wrapper(*args, **kwargs):
+        tracemalloc.start()
+
+        # Call the original function
+        result = func(*args, **kwargs)
+
+        snapshot = tracemalloc.take_snapshot()
+        top_stats = snapshot.statistics("lineno")
+
+        # Print the top memory-consuming lines
+        print(f"\nMemory usage of {func.__name__}:")
+        for stat in top_stats[:5]:
+            print(stat)
+
+        # Return the result
+        return result
+
+    return wrapper
+
+def measure_execution_time(func):
+    def timeit_wrapper(*args, **kwargs):
+
+        start_time = time.perf_counter()
+        result = func(*args, **kwargs)
+        end_time = time.perf_counter()
+        total_time = end_time - start_time
+
+        print(f'\nFunction {func.__name__}{args} {kwargs} Took {total_time:.4f} seconds')
+        return result
+    
+    return timeit_wrapper
+
+
+
 def combine_stereo(left_img, right_img, roi_x_left: int=-1, roi_y_right: int=-1):
     """Assume horizontal stereo pair. Take horizontal middle parts of the pair and
     concatenate together. """

@@ -20,6 +20,8 @@ class DepthEstimation:
         self.meta_r = Meta(self.path_to_config_right)
         self.baseline = -self.meta_r.projection_matrix[0,-1] / self.meta_r.projection_matrix[0,0]
 
+    @measure_memory_usage
+    @measure_execution_time
     def set_input(self, path_to_bag: str):
 
         self.path_to_bag = path_to_bag

@@ -4,6 +4,10 @@ import yaml
 
 from estimate import DepthEstimation
 
+import helpers
+
+import datetime
+
 
 class Bag:
     def __init__(self, path):
@@ -126,3 +130,7 @@ if __name__ == "__main__":
         print('\n', dataset['bags'])
 
     bench.evaluate()
+
+
+    now = datetime.datetime.now()
+    os.rename(helpers.path_log, '-'.join([helpers.path_log, str(now)]))

@@ -1,9 +1,27 @@
 import numpy as np
 
+from functools import wraps
 import tracemalloc
 import time
 
+import os
+
+path_log = '.logs'
+
+if os.path.exists(path_log):
+    for root, dirs, files in os.walk(path_log, topdown=False):
+        for name in files:
+            os.remove(os.path.join(root, name))
+        for name in dirs:
+            os.rmdir(os.path.join(root, name))
+    os.removedirs(path_log)
+
+os.makedirs(path_log)
+
+
+
 def measure_memory_usage(func):
+    @wraps(func)
     def wrapper(*args, **kwargs):
         tracemalloc.start()
 
@@ -13,10 +31,13 @@ def measure_memory_usage(func):
         snapshot = tracemalloc.take_snapshot()
         top_stats = snapshot.statistics("lineno")
 
-        # Print the top memory-consuming lines
-        print(f"\nMemory usage of {func.__name__}:")
-        for stat in top_stats[:5]:
-            print(stat)
+        with open(os.path.join(path_log, 'memory.txt'), 'a') as fp:
+
+            # Print the top memory-consuming lines
+            fp.write(f"\nMemory usage of {func.__name__}:\n")
+            for stat in top_stats[:5]:
+                fp.write(f"{str(stat)}\n")
+
 
         # Return the result
         return result
@@ -24,6 +45,7 @@ def measure_memory_usage(func):
     return wrapper
 
 def measure_execution_time(func):
+    @wraps(func)
     def timeit_wrapper(*args, **kwargs):
 
         start_time = time.perf_counter()
@@ -31,7 +53,9 @@ def measure_execution_time(func):
         end_time = time.perf_counter()
         total_time = end_time - start_time
 
-        print(f'\nFunction {func.__name__}{args} {kwargs} Took {total_time:.4f} seconds')
+        with open(os.path.join(path_log, 'time.txt'), 'a') as fp:
+            fp.write(f'\nFunction {func.__name__}{args} {kwargs} Took {total_time:.4f} seconds')
+
         return result
     
     return timeit_wrapper

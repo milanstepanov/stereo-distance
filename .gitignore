@@ -3,7 +3,8 @@
 data
 
 # hidden files
-.*
+.*/
+.coverage
 
 # notebook
 *.ipynb

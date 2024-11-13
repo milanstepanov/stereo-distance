@@ -12,7 +12,7 @@ class DepthEstimation:
     @measure_memory_usage
     @measure_execution_time
     def __init__(self, path_to_config_left: str, path_to_config_right: str):
-
+        """Initialize DepthEstimation object by setting left and right camera parameters."""
 
         self.path_to_config_left = path_to_config_left
         self.path_to_config_right = path_to_config_right
@@ -32,6 +32,7 @@ class DepthEstimation:
     @measure_memory_usage
     @measure_execution_time
     def set_input(self, path_to_bag: str):
+        """Set stereo pair images and rectifies them."""
 
         self.path_to_bag = path_to_bag
         self.raw_l, self.raw_r = extract_rgb(self.path_to_bag)
@@ -61,6 +62,15 @@ class DepthEstimation:
     @measure_memory_usage
     @measure_execution_time
     def compute_disparity(self, roi: tuple=None, is_checkerboard: bool=False, checkerboard_pattern: tuple=None, is_debug=False):
+        """Compute disparity between rectified stereo pair. Note, have to set input before computing disparity.
+        
+        Supports two mode:
+        1. Expecting an image of a checkerboard (have to set `is_checkerboard` and `checkerboard_pattern`),
+        2. Expecting to provide location of an object whose distance to camera is calculated (have to set `roi`)."""
+        
+        if self.rectified_l is None or self.rectified_r is None:
+            raise RuntimeError("Have to set input images before computing disparity.")
+
         if is_checkerboard:
             if checkerboard_pattern:
 
@@ -191,9 +201,10 @@ class DepthEstimation:
 if __name__ == "__main__":
 
     depth_estimation = DepthEstimation(
-        path_to_config_left='data/left.yaml',
-        path_to_config_right='data/right.yaml'
+        path_to_config_left='data/A008-01-27/left.yaml',
+        path_to_config_right='data/A008-01-27/right.yaml'
     )
+    depth_estimation.set_input('data/A008-01-27/750mm.bag')
 
     depth_estimation.compute_disparity(is_checkerboard=True, checkerboard_pattern=(10,7), is_debug=False)
     estimated_depth = depth_estimation.compute_depth()

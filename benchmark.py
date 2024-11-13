@@ -52,6 +52,9 @@ class Bag:
 
 
 class Benchmark:
+    """Use to benchmark depth estimation. It detects testing cases (located in `data` folder in project's root) and measures
+    depth estimation error.
+    """
 
     def __init__(self, datasets: list[str]):
 

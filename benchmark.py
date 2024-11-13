@@ -42,13 +42,13 @@ class Bag:
         if self.have_roi:
             return self.roi_tl + self.roi_br
         else:
-            raise ValueError(f"ROI not provided.")
+            raise ValueError("ROI not provided.")
         
     def set_error(self, error):
-        if self.error is not None:
-            raise ValueError(f"Cannot set error. Error already set.")
+        if self.metric_error is not None:
+            raise ValueError(f"Cannot set performance error. Error already computed: {self.metric_error}.")
         
-        self.error = error
+        self.metric_error = error
 
 
 class Benchmark:
@@ -102,20 +102,9 @@ class Benchmark:
 
                 ground_truth = float(os.path.split(bag.path)[-1].split(".")[0][:-2])
 
-                bag.metric_error = 100*abs(prediction-ground_truth)/ground_truth
+                bag.set_error(100*abs(prediction-ground_truth)/ground_truth)
 
                 print(f"Dataset: {bag.path}, Error: {bag.metric_error}\n\n")
-
-
-        # accuracy
-
-
-        # execution speed
-
-        # memory usage
-
-        # cpu usage
-        pass
 
 
 if __name__ == "__main__":
@@ -126,8 +115,8 @@ if __name__ == "__main__":
          ]
     )
 
-    for dataset in bench.datasets:
-        print('\n', dataset['bags'])
+    for dtset in bench.datasets:
+        print('\n', dtset['bags'])
 
     bench.evaluate()
 

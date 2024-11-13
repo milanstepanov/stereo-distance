@@ -13,12 +13,21 @@ class DepthEstimation:
     @measure_execution_time
     def __init__(self, path_to_config_left: str, path_to_config_right: str):
 
+
         self.path_to_config_left = path_to_config_left
         self.path_to_config_right = path_to_config_right
 
         self.meta_l = Meta(self.path_to_config_left)
         self.meta_r = Meta(self.path_to_config_right)
         self.baseline = -self.meta_r.projection_matrix[0,-1] / self.meta_r.projection_matrix[0,0]
+
+
+        self.path_to_bag = "" # to be set via `set_input`
+        self.raw_l, self.raw_r = None, None # will be set in `set_input`
+        self.rectified_l, self.rectified_r = None, None # will be set in `set_input`
+
+        self.disparity = None
+        self.depth = None
 
     @measure_memory_usage
     @measure_execution_time
@@ -43,8 +52,8 @@ class DepthEstimation:
                                                     (shape[1], shape[0]), 
                                                     cv2.CV_16SC2))
 
-        left_rectified = cv2.remap(left, maps[0][0], maps[0][1], cv2.INTER_LINEAR);
-        right_rectified = cv2.remap(right, maps[1][0], maps[1][1], cv2.INTER_LINEAR);
+        left_rectified = cv2.remap(left, maps[0][0], maps[0][1], cv2.INTER_LINEAR)
+        right_rectified = cv2.remap(right, maps[1][0], maps[1][1], cv2.INTER_LINEAR)
         
         return left_rectified, right_rectified
     
@@ -179,14 +188,9 @@ class DepthEstimation:
         return baseline*focal_length / depth
     
 
-    def process(self,):
-        pass
-
-
 if __name__ == "__main__":
 
     depth_estimation = DepthEstimation(
-        path_to_bag='data/750mm.bag',
         path_to_config_left='data/left.yaml',
         path_to_config_right='data/right.yaml'
     )

@@ -1,6 +1,7 @@
 rosbags
-opencv-python
 pyyaml
+
+opencv-python
 
 black
 

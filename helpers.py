@@ -68,7 +68,7 @@ def combine_stereo(left_img, right_img, roi_x_left: int=-1, roi_y_right: int=-1)
 
     side_by_side = np.zeros_like(left_img)
     
-    h,w,c = left_img.shape
+    _, w, _ = left_img.shape
     side_by_side[:,:w//2,:] = left_img[:,w//4:3*w//4,:]
     side_by_side[:,w//2:,:] = right_img[:,w//4:3*w//4,:]
 

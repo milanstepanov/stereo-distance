@@ -6,7 +6,7 @@ import time
 
 import os
 
-path_log = '.logs/tmp'
+path_log = '.logs/log'
 
 if os.path.exists(path_log):
     for root, dirs, files in os.walk(path_log, topdown=False):

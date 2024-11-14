@@ -3,9 +3,17 @@ from input import extract_rgb, Meta
 
 import numpy as np
 import cv2
+from scipy.signal import convolve, find_peaks, windows
 
 from helpers import measure_execution_time, measure_memory_usage
 
+from enum import Enum
+
+DisparityEstimationMethod = Enum('DepthEstimationMethod',
+                             [
+                                 ('TM', 1),
+                                 ('BM', 2)
+                             ])
 
 class DepthEstimation:
 
@@ -26,6 +34,8 @@ class DepthEstimation:
         self.raw_l, self.raw_r = None, None # will be set in `set_input`
         self.rectified_l, self.rectified_r = None, None # will be set in `set_input`
 
+        self.method = None
+
         self.disparity = None
         self.depth = None
 
@@ -42,6 +52,9 @@ class DepthEstimation:
         self.rectified_l, self.rectified_r = DepthEstimation.rectify(self.raw_l, self.meta_l,
                                                                      self.raw_r, self.meta_r)
 
+
+    def set_method(self, disparity_estimation_method: DisparityEstimationMethod):
+        self.method = disparity_estimation_method
 
     @staticmethod
     def rectify(left: np.array, left_meta: Meta, right: np.array, right_meta: Meta) -> tuple:
@@ -73,6 +86,9 @@ class DepthEstimation:
         
         if self.rectified_l is None or self.rectified_r is None:
             raise RuntimeError("Have to set input images before computing disparity.")
+        
+        if self.method is None:
+            raise RuntimeError("Have to set methodology to compute disparity.")
 
         if is_checkerboard:
             if checkerboard_pattern:
@@ -120,6 +136,8 @@ class DepthEstimation:
                 cb_right = int(cb_right)
                 cb_top = int(cb_top)
                 cb_bottom = int(cb_bottom)
+
+                roi = (cb_left, cb_top, cb_right, cb_bottom)
             else:
                 raise ValueError(f"Cannot use {is_checkerboard=} mode without setting {checkerboard_pattern=} properly.")
         
@@ -128,10 +146,6 @@ class DepthEstimation:
 
         else:
             raise NotImplementedError("Have to support an image of checkerboard with (10,7) pattern or provide ROI of an object.")
-
-
-
-        cb_centre_x = int((cb_left + cb_right)*.5)
 
         if is_debug:
 
@@ -147,11 +161,25 @@ class DepthEstimation:
             cv2.waitKey(0)
             cv2.destroyWindow("checkerboard full scale")
 
-        # use template matching to find checkerboard in right image
+        if self.method == DisparityEstimationMethod.BM:
+            self.disparity = self.process_block_matching(roi, is_debug)
+        elif self.method == DisparityEstimationMethod.TM:
+            self.disparity = self.process_template_matching(roi, is_debug)
+        else:
+            raise ValueError(f"Unknown disparity estimation method provided. Got {self.method}.")
+    
+
+    @measure_memory_usage
+    @measure_execution_time
+    def process_template_matching(self, roi_left, is_debug):
+        """Use template matching to find an object in right image
+        """
         rectified_gray_l = cv2.cvtColor(self.rectified_l, cv2.COLOR_RGB2GRAY)
         rectified_gray_r = cv2.cvtColor(self.rectified_r, cv2.COLOR_RGB2GRAY)
 
-        template = rectified_gray_l[cb_top:cb_bottom, cb_left:cb_right]
+        cb_centre_x = int((roi_left[0] + roi_left[2])*.5)
+
+        template = rectified_gray_l[roi_left[1]:roi_left[3], roi_left[0]:roi_left[2]]
         if is_debug:
             cv2.imshow("template", template)
             cv2.waitKey(0)
@@ -161,8 +189,6 @@ class DepthEstimation:
         matching_score = cv2.matchTemplate(rectified_gray_r, template, cv2.TM_SQDIFF)
         _, _, min_loc, _ = cv2.minMaxLoc(matching_score)
         top_left = min_loc
-
-        match_centre_x = top_left[0] + w//2
 
         if is_debug:
 
@@ -183,13 +209,126 @@ class DepthEstimation:
             cv2.waitKey(0)
             cv2.destroyAllWindows()
 
-        self.disparity = abs(match_centre_x-cb_centre_x)
-
+        match_centre_x = top_left[0] + w//2
     
+        return abs(match_centre_x-cb_centre_x)
+    
+    
+    @measure_memory_usage
+    @measure_execution_time
+    def process_block_matching(self, roi_left, is_debug):
+
+        focal_length = self.meta_l.projection_matrix[0,0]
+        baseline = -self.meta_r.projection_matrix[0,-1]/self.meta_r.projection_matrix[0,0]
+
+        left_gray_r = cv2.cvtColor(self.rectified_l, cv2.COLOR_RGB2GRAY)
+        right_gray_r = cv2.cvtColor(self.rectified_r, cv2.COLOR_RGB2GRAY)
+
+        # set min and max disparity @TODO make it a parameter
+        min_depth, max_depth = 0.4, 1.75
+        max_disparity = DepthEstimation.to_disparity(min_depth, focal_length, baseline)
+        min_disparity = DepthEstimation.to_disparity(max_depth, focal_length, baseline)
+
+        # Compute disparity on image pyramid
+        multi_resolution = {}
+
+        min_disparity_running = min_disparity
+        max_disparity_running = max_disparity
+
+        left_scaled_running = left_gray_r.copy()
+        right_scaled_running = right_gray_r.copy()
+
+        scale = 1
+        reached = False
+        if is_debug:
+            print("Computing disparity on image pyramid:")
+        while not reached:    
+            
+            scale *= 2
+            min_disparity_running *= 0.5
+            max_disparity_running *= 0.5
+           
+            # coarser estimate seems to work just fine; optionally we can use some interpolation..
+            left_scaled_running = left_scaled_running[::2,::2]
+            right_scaled_running = right_scaled_running[::2,::2]
+            # left_scaled_running = cv2.resize(left_scaled_running, dsize=[int(s//2) for s in left_scaled_running.shape[::-1]])
+            # right_scaled_running = cv2.resize(right_scaled_running, dsize=[int(s//2) for s in right_scaled_running.shape[::-1]])
+
+            bm_min_disparity_scaled = int(min_disparity_running//16 * 16)
+            bm_max_disparity_scaled = int((max_disparity_running//16+1) * 16)
+                
+            stereo = cv2.StereoBM.create(numDisparities=bm_max_disparity_scaled-bm_min_disparity_scaled, blockSize=21)
+            stereo.setMinDisparity(bm_min_disparity_scaled)
+            stereo.setDisp12MaxDiff(10)
+            
+            disparity = stereo.compute(left_scaled_running, right_scaled_running)
+            
+            multi_resolution[(scale, bm_min_disparity_scaled, bm_max_disparity_scaled)] = {
+                'disparity': disparity/16,
+                'left': left_scaled_running,
+                'right': right_scaled_running
+            }
+
+            if is_debug:
+                print(f"Computed disparity at ({scale=}, using disparity range [{bm_min_disparity_scaled}, {bm_max_disparity_scaled}]")
+            
+            if bm_min_disparity_scaled == 16:
+                reached = True
+                continue
+
+        # vote to select range of disparities
+        total = []
+        for key, value in multi_resolution.items():
+
+            region = DepthEstimation.get_roi(value['disparity'], [s//key[0] for s in roi_left])
+            
+            hist, bin_edges = np.histogram((region*key[0]).flatten(), 
+                                           bins=int(max_disparity-min_disparity)//4, 
+                                           range=(min_disparity, max_disparity))
+            
+            # @TODO convert histogram visualization from matplotlib
+            # if is_debug:
+            #     plt.figure(figsize=(10,3))
+            #     plt.bar((bin_edges[1:]+bin_edges[:-1])*.5, hist, width=1.)
+            #     plt.xlim(bin_edges[0], bin_edges[-1])
+            #     plt.show()
+
+            if isinstance(total, list):
+                total = np.zeros_like(hist)                
+            total += hist*key[0]*key[0]
+
+            total = convolve(total, windows.gaussian(7, 3))
+            peaks = find_peaks(total, width=6)
+
+            bins = None
+            if len(peaks[0]) == 0:
+                bins = [np.argmax(total),]
+            else:
+                peak_id = np.argmax(peaks[1]['prominences'])
+                bins = [b for b in range(peaks[1]['left_bases'][peak_id], peaks[1]['right_bases'][peak_id]+1)]
+                
+            disparities_count = hist[bins]
+            disparities_edges = ((bin_edges[1:]+bin_edges[:-1])*.5)[bins]
+
+            disparity = (disparities_count*disparities_edges).sum()/disparities_count.sum()
+
+            return disparity
+
+
+    @staticmethod
+    def get_roi(base, roi):
+        """Extract region of interest roi from a 2D matrix base. roi is 
+        defined in form (left, top, right, bottom)."""
+        if len(base.shape) != 2:
+            raise RuntimeError(f"Expecting two-dimensional input base. Got {base.shape}.")
+        return base[roi[1]:roi[3], roi[0]:roi[2]]
+
+
     def compute_depth(self):
         """Return depth in mm."""
         self.depth = DepthEstimation.to_depth(self.disparity, self.meta_l.projection_matrix[0,0], self.baseline)
         return self.depth*1000
+
 
     @staticmethod
     def to_depth(disparity: float, focal_length: float, baseline: float):
@@ -208,6 +347,7 @@ if __name__ == "__main__":
         path_to_config_right='data/A008-01-27/right.yaml'
     )
     depth_estimation.set_input('data/A008-01-27/750mm.bag')
+    depth_estimation.set_method(DisparityEstimationMethod.TM)
 
     depth_estimation.compute_disparity(is_checkerboard=True, checkerboard_pattern=(10,7), is_debug=False)
     estimated_depth = depth_estimation.compute_depth()

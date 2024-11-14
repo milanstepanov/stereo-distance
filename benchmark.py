@@ -2,7 +2,7 @@
 import os
 import yaml
 
-from estimate import DepthEstimation
+from estimate import DepthEstimation, DisparityEstimationMethod
 
 import helpers
 
@@ -88,11 +88,12 @@ class Benchmark:
                 print(f"Bad path {dataset}.")
 
 
-    def evaluate(self):
+    def evaluate(self, disparity_estimation_method: DisparityEstimationMethod):
 
         for dataset in self.datasets:
 
             estimator = DepthEstimation(dataset['camera-left'], dataset['camera-right'])
+            estimator.set_method(disparity_estimation_method)
             
             for bag in dataset['bags']:
 
@@ -121,7 +122,8 @@ if __name__ == "__main__":
     for dtset in bench.datasets:
         print('\n', dtset['bags'])
 
-    bench.evaluate()
+    method = [DisparityEstimationMethod.TM, DisparityEstimationMethod.BM][1]
+    bench.evaluate(method)
 
 
     now = datetime.datetime.now()

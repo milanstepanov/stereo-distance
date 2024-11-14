@@ -2,6 +2,7 @@ rosbags
 pyyaml
 
 opencv-python
+scipy
 
 black
 

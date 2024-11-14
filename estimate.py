@@ -34,6 +34,9 @@ class DepthEstimation:
     def set_input(self, path_to_bag: str):
         """Set stereo pair images and rectifies them."""
 
+        self.raw_l, self.raw_r = None, None # will be set in `set_input`
+        self.rectified_l, self.rectified_r = None, None # will be set in `set_input`
+
         self.path_to_bag = path_to_bag
         self.raw_l, self.raw_r = extract_rgb(self.path_to_bag)
         self.rectified_l, self.rectified_r = DepthEstimation.rectify(self.raw_l, self.meta_l,

@@ -28,16 +28,14 @@ def measure_memory_usage(func):
         # Call the original function
         result = func(*args, **kwargs)
 
-        snapshot = tracemalloc.take_snapshot()
-        top_stats = snapshot.statistics("lineno")
-
         with open(os.path.join(path_log, 'memory.txt'), 'a') as fp:
 
             # Print the top memory-consuming lines
             fp.write(f"\nMemory usage of {func.__name__}:\n")
-            for stat in top_stats[:5]:
-                fp.write(f"{str(stat)}\n")
+            memory = tracemalloc.get_traced_memory()
+            fp.write(f"Current: {memory[0]}, max used: {memory[1]}, diff: {memory[1]-memory[0]}\n")
 
+        tracemalloc.stop()
 
         # Return the result
         return result
@@ -54,7 +52,7 @@ def measure_execution_time(func):
         total_time = end_time - start_time
 
         with open(os.path.join(path_log, 'time.txt'), 'a') as fp:
-            fp.write(f'\nFunction {func.__name__}{args} {kwargs} Took {total_time:.4f} seconds')
+            fp.write(f'\nFunction {func.__name__}{[arg.shape if isinstance(arg, np.ndarray)  else arg for arg in args]} {kwargs} Took {total_time:.4f} seconds')
 
         return result
     
